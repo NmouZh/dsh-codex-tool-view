@@ -1,0 +1,4 @@
+# 挂载无操作的宿主条目，使 DSH 能够发现并提供浏览器端打包产物。
+- insert:
+    - id: dsh-codex-tool-view
+      name: dsh-codex-tool-view

@@ -1,0 +1,13 @@
+{
+  "id": "dsh-codex-tool-view",
+  "version": "0.4.0",
+  "main": "lib/index.js",
+  "description": "为 DSH 原生聊天视图提供 Codex 风格的紧凑推理与工具调用分组。",
+  "engines": {
+    "dsh": ">=0.1.0-rc.6"
+  },
+  "contributes": {
+    "tools": [],
+    "skills": []
+  }
+}

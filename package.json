@@ -1,0 +1,46 @@
+{
+  "name": "dsh-codex-tool-view",
+  "version": "0.4.0",
+  "description": "为 DeepSeek Harness 原生聊天视图提供 Codex 风格的紧凑推理与工具调用分组",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "plugin",
+    "codex",
+    "tool-calls"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime"
+      ]
+    }
+  },
+  "files": [
+    "lib",
+    "docs",
+    "README.md",
+    "cordis.patch.yml",
+    "dsh.plugin.json"
+  ],
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
