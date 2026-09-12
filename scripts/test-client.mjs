@@ -4,7 +4,7 @@
  * DSH 0.1.5-rc.2 transcript.
  */
 import assert from "node:assert/strict";
-import { addRow, flush, headers, mountPlugin } from "./test-client-harness.mjs";
+import { addRow, addTurnProcessRow, flush, headers, mountPlugin } from "./test-client-harness.mjs";
 
 const check = async (name, run) => {
   try {
@@ -177,6 +177,54 @@ await check("hides trace-only assistant steps but keeps prose rows", async () =>
   assert.equal(withProse.row.getAttribute("data-codex-trace-hidden"), null, "prose rows stay visible");
 });
 
+await check("summarises a folded Turn on the native disclosure row", async () => {
+  const { document } = await mountPlugin();
+  const { button, column } = addTurnProcessRow(document, { turn: 1 });
+  addRow(document, { kind: "user", key: "u1", turn: 1 });
+  addRow(document, { kind: "tool-call", key: "t1", tools: ["read"], turn: 1, hidden: true });
+  addRow(document, { kind: "tool-call", key: "t2", tools: ["read"], turn: 1, hidden: true });
+  addRow(document, { kind: "tool-call", key: "t3", tools: ["bash"], turn: 1, hidden: true });
+  await flush();
+  assert.equal(
+    button.getAttribute("data-codex-phase-summary"),
+    "读取 2 · 命令 1",
+    "folded Turn must read as its phase mix",
+  );
+  assert.equal(headers(column).length, 0, "a folded Turn still gets no group headers");
+});
+
+await check("swaps the folded summary for headers when the Turn opens", async () => {
+  const { document } = await mountPlugin();
+  const { button, column } = addTurnProcessRow(document, { turn: 1, expanded: true });
+  addRow(document, { kind: "tool-call", key: "t1", tools: ["read"], turn: 1 });
+  addRow(document, { kind: "tool-call", key: "t2", tools: ["bash"], turn: 1 });
+  await flush();
+  assert.equal(button.getAttribute("data-codex-phase-summary"), null, "an open Turn carries no summary");
+  assert.deepEqual(
+    headers(column).map((item) => item.title),
+    ["读取了文件", "运行了命令"],
+  );
+
+  button.click(); // fold the Turn again
+  await flush();
+  assert.equal(button.getAttribute("data-codex-phase-summary"), "读取 1 · 命令 1");
+  assert.equal(headers(column).length, 0, "headers yield to the folded native row");
+});
+
+await check("folds the phase tail away when a Turn is very mixed", async () => {
+  const { document } = await mountPlugin();
+  const { button } = addTurnProcessRow(document, { turn: 1 });
+  addRow(document, { kind: "user", key: "u1", turn: 1 });
+  for (const [index, name] of ["read", "bash", "grep", "write", "web_fetch", "todo_write"].entries()) {
+    addRow(document, { kind: "tool-call", key: `t${String(index)}`, tools: [name], turn: 1, hidden: true });
+  }
+  await flush();
+  assert.equal(
+    button.getAttribute("data-codex-phase-summary"),
+    "读取 1 · 命令 1 · 搜索 1 · 编辑 1 · …",
+  );
+});
+
 await check("removes every decoration when disposed", async () => {
   const { document, dispose } = await mountPlugin();
   addRow(document, { kind: "user", key: "u1" });
@@ -187,6 +235,7 @@ await check("removes every decoration when disposed", async () => {
   assert.equal(document.body.querySelectorAll("[data-codex-tool-group]").length, 0);
   assert.equal(document.body.querySelectorAll("[data-codex-trace-hidden]").length, 0);
   assert.equal(document.body.querySelectorAll("[data-codex-trace-member]").length, 0);
+  assert.equal(document.body.querySelectorAll("[data-codex-phase-summary]").length, 0);
   assert.equal(document.head.querySelectorAll('style[data-plugin="dsh-codex-tool-view"]').length, 0);
 });
 

@@ -425,7 +425,7 @@ export async function mountPlugin() {
 }
 
 /** Append one flow row to the transcript column. */
-export function addRow(document, { kind, key, tools = [], state, think = false, prose }) {
+export function addRow(document, { kind, key, tools = [], state, think = false, prose, turn, hidden = false }) {
   const column = document.body.querySelector("[data-chat-column]") ?? (() => {
     const created = document.createElement("div");
     created.setAttribute("data-chat-column", "true");
@@ -435,6 +435,8 @@ export function addRow(document, { kind, key, tools = [], state, think = false, 
   const row = document.createElement("div");
   row.setAttribute("data-chat-flow-kind", kind);
   if (key !== undefined) row.setAttribute("data-chat-flow-key", key);
+  if (turn !== undefined) row.setAttribute("data-chat-turn", String(turn));
+  if (hidden) row.setAttribute("hidden", "until-found");
   if (think) {
     const reason = document.createElement("div");
     reason.setAttribute("data-variant", "think");
@@ -455,6 +457,30 @@ export function addRow(document, { kind, key, tools = [], state, think = false, 
   column.append(row);
   document.notify();
   return { column, row };
+}
+
+/**
+ * Add DSH's own Turn-process disclosure row: a flow item whose button carries the
+ * Turn number, exactly as ui-chat renders it.
+ * @returns the disclosure button, so a test can read or toggle it.
+ */
+export function addTurnProcessRow(document, { turn, expanded = false }) {
+  const { column, row } = addRow(document, { kind: "turn-process", key: `process-${String(turn)}`, turn });
+  const button = document.createElement("button");
+  button.setAttribute("data-turn-process", String(turn));
+  button.setAttribute("aria-expanded", String(expanded));
+  button.addEventListener("click", () => {
+    const open = button.getAttribute("aria-expanded") === "true";
+    button.setAttribute("aria-expanded", String(!open));
+    for (const member of column.querySelectorAll(`[data-chat-turn="${String(turn)}"]`)) {
+      if (member === row) continue;
+      if (open) member.setAttribute("hidden", "until-found");
+      else member.removeAttribute("hidden");
+    }
+  });
+  row.append(button);
+  document.notify();
+  return { button, column, row };
 }
 
 /** Collect the rendered group headers of a column. */
