@@ -111,42 +111,79 @@ DSH 原生聊天视图会保留这些完整记录，但工具调用较多时，�
 
 ## 兼容性
 
-- 插件版本：`0.4.0`
-- DSH：`>=0.1.0-rc.6`
+- 插件版本：`0.5.0`
+- DSH：`>=0.1.0-rc.6 <0.2.0`（已在 `0.1.5-rc.2` 上核对契约与语义锚点）
 - Node.js：`^22.19.0 || >=24.0.0`
 - 客户端平台：Web
 
-当前实现依赖 DSH 提供的以下稳定语义属性：
+### 客户端加载契约
 
-- `data-chat-flow-kind`
-- `data-chat-flow-key`
-- `data-tool`
-- `data-state`
-- `data-variant="think"`
+本插件是浏览器端插件包，遵循 DSH 当前的客户端装载模型：
 
-本插件不依赖生成的 CSS Module 类名。如果未来的 DSH 版本更改了 DOM，导致这些语义锚点不可用，插件将不修改对应内容，原始聊天视图仍会保持可见。
+- `package.json` 的 `dsh.client` 声明 `platform: "web"`，并以 `exports["./client"]` 指向 bundle；
+- `lib/client.js` 以 `window.__ModuleLoader__.load({ id, factory })` 登记工厂，`id` 与包名一致；
+- 工厂形如 `factory(require)`，返回 `module.exports`，其中导出 `apply(ctx)`（挂载）与 `inject`（所需服务）；
+- 插件只使用模块表基线与原生 DOM，不 `require` 任何其他插件包，因此无需声明 `dsh.client.external`。
+
+改动这一层契约会让插件在客户端静默不激活：DSH 只会登记工厂，`apply` 不会运行，页面保持原生外观。
+
+### 依赖的语义锚点
+
+插件只依赖 DSH 输出的语义属性，不依赖生成的 CSS Module 类名：
+
+- `data-chat-flow-kind`、`data-chat-flow-key`：对话行类型与稳定键
+- `data-tool`、`data-state`：工具行名称（`read`/`grep`/`bash`/`write`/`edit`/`web_fetch`/`web_search`/`pwsh`/`run_code` 等）与状态（`ok`/`running`/`error`/`stopped`）
+- `data-variant="think"`：思考子视图
+- `data-turn-process`、`aria-expanded`：原生 Turn 过程折叠控件
+- `hidden="until-found"`：原生折叠时对其成员行的隐藏方式
+
+如果未来的 DSH 版本更改了 DOM，导致这些锚点不可用，插件不会修改对应内容，原始聊天视图仍保持可见。
+
+### 与原生 Turn 过程折叠共存
+
+较新的 DSH 会把一轮内的过程收进原生「过程」折叠控件，并用 `hidden="until-found"` 隐藏成员行。插件让出这一层折叠：
+
+- 某一轮被原生控件折叠时，插件不生成分组标题，避免出现空标题；
+- 原生控件展开时，插件在过程内部按活动类型继续细分；
+- 用户展开某一组后又把它折叠，若该轮已无可见内容，插件会折叠原生控件本身，把折叠状态交还给原生 UI。
 
 ## 本地安装
 
-当前仓库没有独立的安装脚本、构建脚本或开发服务器配置。仓库中可以确认的接入方式如下：
+1. 把本项目目录作为 `link:` 依赖加入目标 profile 的 `package.json`：
+   ```jsonc
+   {
+     "dependencies": { "dsh-codex-tool-view": "link:/path/to/dsh-codex-tool-view" },
+     "dsh": { "profile": { "bundles": ["...", "dsh-codex-tool-view"] } }
+   }
+   ```
+   `dsh.profile.bundles` 里只能写包名，`link:` 前缀只出现在 `dependencies`。
+2. 在该 profile 目录执行 `pnpm install`；
+3. 重启宿主（`dsh --profile <name> web` 等）。客户端 bundle 只在宿主启动时合成进 boot 图，未重启不会生效；
+4. 打开一个包含工具调用的对话，确认连续活动显示为可折叠区块。
 
-1. 将本项目目录作为链接依赖添加到目标 DSH 配置中；
-2. 使用目标 DSH 配置完成浏览器端打包；
-3. 重启 DSH Desktop；
-4. 打开一个包含工具调用的对话，确认活动记录已显示为可折叠区块。
+也可以用 `dsh plugin --profile <name> add <路径>`（该命令是 pnpm 的转发器）：安装后仍要确认包名已出现在 `dsh.profile.bundles` 中，缺失时 DSH 会大声报错，而不是静默忽略。
 
-插件通过 `cordis.patch.yml` 注册宿主条目，使 DSH 能够发现并提供浏览器端打包产物。具体的链接依赖和打包命令取决于你的 DSH 工作区配置，本仓库不提供可直接复制的统一命令。
+## 开发与自测
+
+仓库自带一个最小 DOM 仿真，不需要浏览器即可运行行为断言：
+
+```bash
+node scripts/test-client.mjs
+```
+
+它按 DSH 的方式装载 `lib/client.js`（`__ModuleLoader__` 工厂 + `ctx.effect` 挂载），并用合成对话断言分组、状态展开、原生折叠共存与卸载清理等 10 项行为。改动 `lib/client.js` 后应先跑通它，再重启宿主做端到端确认。
 
 ## 项目结构
 
 | 路径 | 说明 |
 | --- | --- |
 | `lib/client.js` | 浏览器端分组、折叠、状态监听与样式逻辑 |
-| `lib/index.js` | DSH 插件主入口 |
-| `cordis.patch.yml` | 用于发现浏览器端打包产物的宿主配置 |
+| `lib/index.js` | DSH 插件主入口（宿主侧无操作，仅用于被发现） |
+| `cordis.patch.yml` | 注册宿主条目，使 DSH 发现并提供客户端 bundle |
 | `dsh.plugin.json` | 插件 ID、版本、入口和 DSH 版本要求 |
+| `scripts/test-client.mjs` | 行为断言入口 |
+| `scripts/test-client-harness.mjs` | 最小 DOM 仿真与装载器 |
 | `docs/images/` | README 使用的示例图片 |
-| `docs/plans/` | 设计说明文档 |
 
 ## 许可证
 
